@@ -112,7 +112,7 @@ class CacheManager<T> {
     // Enforce max size (LRU eviction)
     if (this.memoryCache.size > this.config.maxSize) {
       const firstKey = this.memoryCache.keys().next().value
-      this.memoryCache.delete(firstKey)
+      this.memoryCache.delete(firstKey || '')
     }
 
     // Store in localStorage if enabled
@@ -248,7 +248,6 @@ class CacheManager<T> {
    */
   private loadFromLocalStorage(): void {
     try {
-      const now = Date.now()
       const entries: Array<[string, CacheEntry<T>]> = []
 
       for (let i = 0; i < localStorage.length; i++) {
@@ -285,7 +284,6 @@ class CacheManager<T> {
    */
   private cleanupLocalStorage(): void {
     try {
-      const now = Date.now()
       const keysToRemove: string[] = []
 
       for (let i = 0; i < localStorage.length; i++) {
