@@ -72,7 +72,7 @@ export const googleSearch = async (query: string, maxResults: number = 5) => {
         query.trim(),
         async () => {
             try {
-                const response = await axios.get(`/api/google/complete/search?client=chrome&q=${encodeURIComponent(query)}&hl=en`)
+                const response = await axios.get(`https://www.google.com/complete/complete/search?client=chrome&q=${encodeURIComponent(query)}&hl=en`)
                 console.log("googleSearch", response.data)
                 return response.data
             } catch (error) {
