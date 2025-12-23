@@ -13,6 +13,7 @@ export default function SearchPage() {
     const [hasMore, setHasMore] = useState(true)
     const [inputText, setInputText] = useState('')
     const [searchResults, setSearchResults] = useState<any[]>([])
+    const [hotwords, setHotwords] = useState<any[]>([])
     const observerTarget = useRef<HTMLDivElement>(null)
     const debounceDelay = 100
 
@@ -47,8 +48,18 @@ export default function SearchPage() {
         return null
     }, [])
 
+    window.onNativeEvent = function (eventType, data) {
+
+        if (eventType === 'hotWords') {
+            setHotwords(data?.hotwords || [])
+        }
+    }
+
     // Initial load
     useEffect(() => {
+        if(window?.AndroidBridge){
+            window?.AndroidBridge?.getHotWordsToJs?.()
+        }
         const currentFlavour = getCurrentFlavour()
         console.log("currentFlavour", currentFlavour)
         fetchNews(1, false)
@@ -74,8 +85,8 @@ export default function SearchPage() {
             const prefixMatches = searchCache.getWithPrefix(trimmedQuery, 5)
             if (prefixMatches.length > 0 && !cached) {
                 // Use the first match's data
-                const matchData = prefixMatches[0].data
-                const maxResultsToShow = matchData?.[1]?.slice(0, 5) || []
+                const matchData = prefixMatches?.[0].data
+                const maxResultsToShow = matchData?.[1] || []
                 setSearchResults(maxResultsToShow)
             }
         }
@@ -83,7 +94,7 @@ export default function SearchPage() {
         // Fetch fresh data in background (cache will handle deduplication)
         try {
             const searchResult = await googleSearch(trimmedQuery)
-            const maxResultsToShow = searchResult?.[1]?.slice(0, 5) || []
+            const maxResultsToShow = searchResult?.[1] || []
             setSearchResults(maxResultsToShow)
         } catch (error) {
             // If fetch fails and we have cached results, keep showing them
@@ -173,7 +184,7 @@ export default function SearchPage() {
     return (
         <div className='w-full h-screen flex flex-col p-2 gap-3 bg-[#f4f4f4] overflow-y-auto'>
             <SearchInput onChangeText={setInputText} inputText={inputText} />
-            <SearchItemContainer openUrl={openUrl} inputText={inputText} searchResults={searchResults} />
+            <SearchItemContainer openUrl={openUrl} hotwords={hotwords} inputText={inputText} searchResults={searchResults} />
             <div className='w-full flex flex-col gap-3'>
                 {newsArticles?.map((article, index) => (
                     <div

@@ -72,9 +72,14 @@ export const googleSearch = async (query: string, maxResults: number = 5) => {
         query.trim(),
         async () => {
             try {
-                const response = await axios.get(`https://www.google.com/complete/complete/search?client=chrome&q=${encodeURIComponent(query)}&hl=en`)
-                console.log("googleSearch", response.data)
-                return response.data
+                const responseString = await window?.AndroidBridge?.search(query)
+                if(responseString){
+                    const response = JSON.parse(responseString)
+                    // Return in format [query, suggestions] to match existing code expectations
+                    return [response?.query || query, response?.suggestions || []]
+                }else{
+                    return [query, []]
+                }
             } catch (error) {
                 console.error('Error fetching search:', error)
                 throw error
