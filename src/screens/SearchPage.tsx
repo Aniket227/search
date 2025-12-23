@@ -15,6 +15,7 @@ export default function SearchPage() {
     const [searchResults, setSearchResults] = useState<any[]>([])
     const [hotwords, setHotwords] = useState<any[]>([])
     const observerTarget = useRef<HTMLDivElement>(null)
+    const observerRef = useRef<IntersectionObserver | null>(null)
     const debounceDelay = 100
 
     const fetchNews = useCallback(async (page: number, append: boolean = false) => {
@@ -54,11 +55,14 @@ export default function SearchPage() {
         }
     }
 
-    // Initial load
-    useEffect(() => {
+    useEffect(()=>{
         if(window?.AndroidBridge){
             window?.AndroidBridge?.getHotWordsToJs?.()
         }
+    },[window?.AndroidBridge])
+
+    // Initial load
+    useEffect(() => {
         const currentFlavour = getCurrentFlavour()
         console.log("currentFlavour", currentFlavour)
         fetchNews(1, false)
@@ -142,28 +146,84 @@ export default function SearchPage() {
 
     // Intersection Observer for infinite scroll
     useEffect(() => {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && hasMore && !isLoading) {
-                    const nextPage = currentPageNo + 1
-                    setCurrentPageNo(nextPage)
-                    fetchNews(nextPage, true)
-                }
-            },
-            { threshold: 0.1 }
-        )
+        const setupObserver = () => {
+            // Clean up existing observer if any
+            if (observerRef.current) {
+                observerRef.current.disconnect()
+                observerRef.current = null
+            }
 
-        const currentTarget = observerTarget.current
-        if (currentTarget) {
+            const currentTarget = observerTarget.current
+            if (!currentTarget) {
+                return
+            }
+
+            // Create new observer
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    if (entries[0]?.isIntersecting && hasMore && !isLoading) {
+                        const nextPage = currentPageNo + 1
+                        setCurrentPageNo(nextPage)
+                        fetchNews(nextPage, true)
+                    }
+                },
+                { 
+                    threshold: 0.1,
+                    rootMargin: '50px' // Start loading slightly before reaching the element
+                }
+            )
+
             observer.observe(currentTarget)
+            observerRef.current = observer
         }
 
-        return () => {
-            if (currentTarget) {
-                observer.unobserve(currentTarget)
+        // Setup observer immediately if target exists
+        // Use a small delay to ensure DOM is updated
+        const timeoutId = setTimeout(() => {
+            setupObserver()
+        }, 100)
+
+        // Also setup observer when visibility changes (for WebView restore)
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                // Reattach observer when page becomes visible
+                setTimeout(() => {
+                    setupObserver()
+                }, 100)
             }
         }
-    }, [hasMore, isLoading, currentPageNo, fetchNews])
+
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        // Also listen for focus events (when WebView regains focus)
+        const handleFocus = () => {
+            setTimeout(() => {
+                setupObserver()
+            }, 100)
+        }
+
+        window.addEventListener('focus', handleFocus)
+
+        // Reattach when page becomes visible (for WebView lifecycle)
+        const handlePageShow = () => {
+            setTimeout(() => {
+                setupObserver()
+            }, 100)
+        }
+
+        window.addEventListener('pageshow', handlePageShow)
+
+        return () => {
+            clearTimeout(timeoutId)
+            if (observerRef.current) {
+                observerRef.current.disconnect()
+                observerRef.current = null
+            }
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            window.removeEventListener('focus', handleFocus)
+            window.removeEventListener('pageshow', handlePageShow)
+        }
+    }, [hasMore, isLoading, currentPageNo, fetchNews, newsArticles.length])
 
     const openUrl = useCallback((url: string) => {
         if (window?.AndroidBridge) {
