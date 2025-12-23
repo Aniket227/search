@@ -12,5 +12,6 @@ declare global {
       fireAnalyticEvent(event: string, data?: string): void;
       openNativeScreen(screenName: string, query?: string): void;
     };
+    onNativeEvent?: (eventType: string, data?: { hotwords?: any[] }) => void;
   }
 }
