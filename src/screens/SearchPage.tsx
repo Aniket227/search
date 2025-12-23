@@ -49,7 +49,6 @@ export default function SearchPage() {
     }, [])
 
     window.onNativeEvent = function (eventType: string, data?: { hotwords?: any[] }) {
-        window.alert("onNativeEvent"+ " " + eventType + " " + data)
         if (eventType === 'hotWords') {
             setHotwords(data?.hotwords || [])
         }
