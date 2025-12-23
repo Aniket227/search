@@ -185,7 +185,7 @@ export default function SearchPage() {
         <div className='w-full h-screen flex flex-col p-2 gap-3 bg-[#f4f4f4] overflow-y-auto'>
             <SearchInput onChangeText={setInputText} inputText={inputText} />
             <SearchItemContainer openUrl={openUrl} hotwords={hotwords} inputText={inputText} searchResults={searchResults} />
-            <div className='w-full flex flex-col gap-3'>
+            {inputText?.length == 0 && <div className='w-full flex flex-col gap-3'>
                 {newsArticles?.map((article, index) => (
                     <div
                         key={`${article.u}-${index}`}
@@ -204,7 +204,7 @@ export default function SearchPage() {
                         <p className='text-gray-500'>No more news to load</p>
                     </div>
                 )}
-            </div>
+            </div>}
         </div>
     )
 }
