@@ -42,12 +42,6 @@ export default function SearchPage() {
         }
     }, [])
 
-    const getCurrentFlavour = useCallback(async () => {
-        if (window?.AndroidBridge) {
-            return window?.AndroidBridge?.getCurrentFlavour()
-        }
-        return null
-    }, [])
 
     window.onNativeEvent = function (eventType: string, data?: { hotwords?: any[] }) {
         if (eventType === 'hotWords') {
@@ -63,70 +57,40 @@ export default function SearchPage() {
 
     // Initial load
     useEffect(() => {
-        const currentFlavour = getCurrentFlavour()
-        console.log("currentFlavour", currentFlavour)
         fetchNews(1, false)
     }, [fetchNews])
 
-    const fetchSearch = useCallback(async (query: string) => {
-        if (!query || !query.trim()) {
+    const fetchSearch = useCallback(async (trimmedQuery: string) => {
+        if (!trimmedQuery) {
             setSearchResults([])
             return
         }
-
-        const trimmedQuery = query.trim()
-
-        // Check cache first for instant results (Chrome-like performance)
-        const cached = searchCache.get(trimmedQuery)
-        if (cached) {
-            const maxResultsToShow = cached?.[1]?.slice(0, 5) || []
-            setSearchResults(maxResultsToShow)
-        }
-
-        // Also check for prefix matches (for partial queries)
-        if (trimmedQuery.length >= 2) {
-            const prefixMatches = searchCache.getWithPrefix(trimmedQuery, 5)
-            if (prefixMatches.length > 0 && !cached) {
-                // Use the first match's data
-                const matchData = prefixMatches?.[0].data
-                const maxResultsToShow = matchData?.[1] || []
-                setSearchResults(maxResultsToShow)
-            }
-        }
-
         // Fetch fresh data in background (cache will handle deduplication)
         try {
             const searchResult = await googleSearch(trimmedQuery)
             const maxResultsToShow = searchResult?.[1] || []
             setSearchResults(maxResultsToShow)
         } catch (error) {
-            // If fetch fails and we have cached results, keep showing them
-            if (!cached) {
                 console.error('Error fetching search:', error)
-            }
         }
     }, [])
 
     useEffect(() => {
         // Show cached results immediately for instant feedback
-        if (inputText && inputText.trim()) {
-            const trimmedQuery = inputText.trim()
+        const trimmedQuery = inputText?.trim()?.toLowerCase() || ''
+        if (trimmedQuery) {
             const cached = searchCache.get(trimmedQuery)
+            console.log("cached", cached, "trimmedQuery.length", trimmedQuery.length)
             if (cached) {
                 const maxResultsToShow = cached?.[1]?.slice(0, 5) || []
                 setSearchResults(maxResultsToShow)
             } else if (trimmedQuery.length >= 2) {
-                // Try prefix matching for partial queries
                 const prefixMatches = searchCache.getWithPrefix(trimmedQuery, 5)
                 if (prefixMatches.length > 0) {
                     const matchData = prefixMatches[0].data
                     const maxResultsToShow = matchData?.[1]?.slice(0, 5) || []
                     setSearchResults(maxResultsToShow)
-                } else {
-                    setSearchResults([])
                 }
-            } else {
-                setSearchResults([])
             }
         } else {
             setSearchResults([])
@@ -134,8 +98,8 @@ export default function SearchPage() {
 
         // Debounce API call for fresh data
         const timer = setTimeout(() => {
-            if (inputText && inputText.trim()) {
-                fetchSearch(inputText)
+            if (trimmedQuery) {
+                fetchSearch(trimmedQuery)
             }
         }, debounceDelay)
 

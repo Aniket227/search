@@ -13,6 +13,7 @@ export default function SearchItemContainer({ searchResults, inputText, openUrl,
     const previousResultsRef = useRef<string[]>([])
 
     useEffect(() => {
+    console.log("shouldAnimate",shouldAnimate)
         const resultsChanged = JSON.stringify(searchResults) !== JSON.stringify(previousResultsRef.current)
         
         if (!resultsChanged && searchResults.length > 0) {
@@ -53,14 +54,15 @@ export default function SearchItemContainer({ searchResults, inputText, openUrl,
                         item={item} 
                         openUrl={openUrl}
                         index={index}
-                        shouldAnimate={shouldAnimate}
+                        shouldAnimate={false}
                     />
                 ))}
                 {inputText?.length === 0 && hotwords?.map((item, index) => (
                     <SearchItem 
                         isLastItem={index === hotwords?.length - 1} 
                         key={`hotword-${item?.keyword}-${index}`} 
-                        item={item?.keyword} 
+                        item={item?.keyword}
+                        redirectUrl={item?.redirectUrl} 
                         openUrl={openUrl}
                         index={index}
                     />

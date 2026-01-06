@@ -61,48 +61,23 @@ export const getNews = async (
     )
 }
 
-// Google search with caching for Chrome-like instant results
 export const googleSearch = async (query: string, maxResults: number = 5) => {
-    if (!query || !query.trim()) {
+    if (!query) {
         return []
     }
 
     return cachedApiCall(
         searchCache,
-        query.trim(),
+        query?.toLowerCase() || '',
         async () => {
             try {
                 const responseString = await window?.AndroidBridge?.search(query)
                 if(responseString){
                     const response = JSON.parse(responseString)
-                    // Return in format [query, suggestions] to match existing code expectations
                     return [response?.query || query, response?.suggestions || []]
                 }else{
                     return [query, []]
                 }
-            } catch (error) {
-                console.error('Error fetching search:', error)
-                throw error
-            }
-        },
-        { maxResults }
-    )
-}
-
-// Bing search with caching
-export const bingSearch = async (query: string, maxResults: number = 5) => {
-    if (!query || !query.trim()) {
-        return []
-    }
-
-    return cachedApiCall(
-        searchCache,
-        `bing_${query.trim()}`,
-        async () => {
-            try {
-                const response = await axios.get(`/api/bing/osjson.aspx?query=${encodeURIComponent(query)}`)
-                console.log("bingSearch", response.data)
-                return response.data
             } catch (error) {
                 console.error('Error fetching search:', error)
                 throw error

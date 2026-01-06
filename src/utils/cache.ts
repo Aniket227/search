@@ -24,7 +24,7 @@ class CacheManager<T> {
 
   constructor(config: CacheConfig = {}) {
     this.config = {
-      ttl: config.ttl ?? 5 * 60 * 1000, // 5 minutes default
+      ttl: config.ttl ?? 60 * 60 * 1000, // 60 minutes default
       maxSize: config.maxSize ?? 1000, // 1000 entries default
       useLocalStorage: config.useLocalStorage ?? true,
       localStoragePrefix: config.localStoragePrefix ?? 'search_cache_',
@@ -394,4 +394,7 @@ export async function cachedApiCall<T>(
     throw error
   }
 }
+
+
+
 
