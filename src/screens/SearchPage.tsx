@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import SearchInput from '../components/SearchInput'
-import SearchItemContainer from '../components/SearchItemContainer'
-import NewsArticles from '../components/NewsArticles'
+import { SearchInput } from '../components/SearchInput'
+import { SearchItemContainer } from '../components/SearchItemContainer'
+import { NewsArticles } from '../components/NewsArticles'
 import { getNews, googleSearch } from '../api'
 import type { NewsArticle } from '../api'
 import { searchCache } from '../utils/cache'
+import LoadingSpinner from '../components/common/LoadingSpinner'
 
 export default function SearchPage() {
     const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
@@ -17,6 +18,8 @@ export default function SearchPage() {
     const observerTarget = useRef<HTMLDivElement>(null)
     const observerRef = useRef<IntersectionObserver | null>(null)
     const debounceDelay = 100
+    const inputRef = useRef<HTMLInputElement>(null)
+
 
     const fetchNews = useCallback(async (page: number, append: boolean = false) => {
         setIsLoading(true)
@@ -42,18 +45,11 @@ export default function SearchPage() {
         }
     }, [])
 
-
     window.onNativeEvent = function (eventType: string, data?: { hotwords?: any[] }) {
         if (eventType === 'hotWords') {
             setHotwords(data?.hotwords || [])
         }
     }
-
-    useEffect(()=>{
-        if(window?.AndroidBridge){
-            window?.AndroidBridge?.getHotWordsToJs?.()
-        }
-    },[window?.AndroidBridge])
 
     // Initial load
     useEffect(() => {
@@ -206,7 +202,7 @@ export default function SearchPage() {
 
     return (
         <div className='w-full h-screen flex flex-col p-2 gap-3 bg-[#f4f4f4] overflow-y-auto'>
-            <SearchInput onChangeText={setInputText} inputText={inputText} />
+            <SearchInput inputRef={inputRef} onChangeText={setInputText} inputText={inputText} />
             <SearchItemContainer openUrl={openUrl} hotwords={hotwords} inputText={inputText} searchResults={searchResults} />
             {inputText?.length == 0 && <div className='w-full flex flex-col gap-3'>
                 {newsArticles?.map((article, index) => (
@@ -218,11 +214,9 @@ export default function SearchPage() {
                     </div>
                 ))}
                 {isLoading && (
-                    <div className='w-full flex items-center justify-center p-4'>
-                        <p className='text-gray-500'>Loading more news...</p>
-                    </div>
+                    <LoadingSpinner />
                 )}
-                {!hasMore && newsArticles.length > 0 && (
+                {!hasMore && newsArticles?.length > 0 && (
                     <div className='w-full flex items-center justify-center p-4'>
                         <p className='text-gray-500'>No more news to load</p>
                     </div>

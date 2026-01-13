@@ -1,14 +1,15 @@
 import { IMAGES } from '../constants/images'
 import type { NewsArticle } from '../api'
+import React, { useCallback } from 'react';
 
 interface NewsArticlesProps {
     article: NewsArticle;
     openUrl: (url: string) => void;
 }
 
-export default function NewsArticles({ article, openUrl }: NewsArticlesProps) {
+export const NewsArticles = React.memo(({ article, openUrl }: NewsArticlesProps) => {
     // Format the date/time from dbtime
-    const formatTime = (dbtime: string) => {
+    const formatTime = useCallback((dbtime: string) => {
         try {
             const date = new Date(dbtime)
             const now = new Date()
@@ -25,14 +26,14 @@ export default function NewsArticles({ article, openUrl }: NewsArticlesProps) {
         } catch {
             return dbtime
         }
-    }
+    },[])
 
     return (
         <div className='cursor-pointer hover:opacity-90 transition-opacity' onClick={()=>openUrl(article.u)}>
             <img 
                 src={article.img} 
                 alt={article.t} 
-                className='w-full h-48 object-cover rounded-md' 
+                className='w-full h-[30vh] md:h-[40vh] lg:h-[60vh] object-cover rounded-md' 
                 onError={(e) => {
                     e.currentTarget.src = 'https://via.placeholder.com/400x200?text=News'
                 }}
@@ -57,4 +58,4 @@ export default function NewsArticles({ article, openUrl }: NewsArticlesProps) {
             </div>
         </div>
     )
-}
+})

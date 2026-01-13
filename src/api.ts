@@ -71,7 +71,7 @@ export const googleSearch = async (query: string, maxResults: number = 5) => {
         query?.toLowerCase() || '',
         async () => {
             try {
-                const responseString = await window?.AndroidBridge?.search(query)
+                const responseString = await window?.AndroidBridge?.search(query, maxResults)
                 if(responseString){
                     const response = JSON.parse(responseString)
                     return [response?.query || query, response?.suggestions || []]

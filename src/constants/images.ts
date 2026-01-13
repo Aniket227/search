@@ -6,6 +6,7 @@ import magnifyingGlass from '../assets/magnifyingGlass.webp'
 import magnifyingGlassGray from '../assets/magnifyingGlassGray.webp'
 import reactLogo from '../assets/react.svg'
 import clock from '../assets/clock.webp'
+import mic from '../assets/mic.webp'
 
 export const IMAGES = {
   logo: '/logo.png', // Assumes logo.png is in public folder
@@ -13,6 +14,7 @@ export const IMAGES = {
   magnifyingGlass,
   magnifyingGlassGray,
   reactLogo,
-  clock
+  clock,
+  mic
 } as const
 

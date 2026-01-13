@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import React from 'react';
 import SearchItem from './SearchItem'
 
 interface SearchItemContainerProps {
@@ -7,49 +7,14 @@ interface SearchItemContainerProps {
     openUrl: (url: string) => void;
     hotwords: any[];
 }
-export default function SearchItemContainer({ searchResults, inputText, openUrl, hotwords }: SearchItemContainerProps) {
-    const [displayResults, setDisplayResults] = useState<string[]>([])
-    const [shouldAnimate, setShouldAnimate] = useState(false)
-    const previousResultsRef = useRef<string[]>([])
-
-    useEffect(() => {
-    console.log("shouldAnimate",shouldAnimate)
-        const resultsChanged = JSON.stringify(searchResults) !== JSON.stringify(previousResultsRef.current)
-        
-        if (!resultsChanged && searchResults.length > 0) {
-            return
-        }
-
-        if (searchResults.length === 0) {
-            setDisplayResults([])
-            previousResultsRef.current = []
-            setShouldAnimate(false)
-            return
-        }
-
-        const wasEmpty = previousResultsRef.current.length === 0
-        const hasResults = searchResults.length > 0
-        
-        if (wasEmpty && hasResults) {
-            setShouldAnimate(true)
-            setTimeout(() => {
-                setShouldAnimate(false)
-            }, 400)
-        } else {
-            setShouldAnimate(false)
-        }
-
-        setDisplayResults(searchResults)
-        previousResultsRef.current = searchResults
-    }, [searchResults])
-
+export const SearchItemContainer = React.memo(({ searchResults, inputText, openUrl, hotwords }: SearchItemContainerProps) =>{
     return (
-        <div className='w-full flex flex-col gap-0.5 rounded-lg bg-white border border-[#e7e7e7] p-2 h-full'>
+        <div className='w-full flex flex-col gap-0.5 rounded-lg bg-white border border-[#e7e7e7] p-2 h-auto'>
             <p className='text-sm text-[#585858] py-2.5'>{inputText?.length > 0 ? "Search Suggestions" : "Sponsored Searches"}</p>
             <div className="grow h-full overflow-hidden">
-                {displayResults?.map((item, index) => (
+                {searchResults?.map((item, index) => (
                     <SearchItem 
-                        isLastItem={index === displayResults?.length - 1} 
+                        isLastItem={index === searchResults?.length - 1} 
                         key={item} 
                         item={item} 
                         openUrl={openUrl}
@@ -57,7 +22,7 @@ export default function SearchItemContainer({ searchResults, inputText, openUrl,
                         shouldAnimate={false}
                     />
                 ))}
-                {inputText?.length === 0 && hotwords?.map((item, index) => (
+                {(inputText?.length === 0 || searchResults?.length === 0) && hotwords?.map((item, index) => (
                     <SearchItem 
                         isLastItem={index === hotwords?.length - 1} 
                         key={`hotword-${item?.keyword}-${index}`} 
@@ -70,4 +35,4 @@ export default function SearchItemContainer({ searchResults, inputText, openUrl,
             </div>
         </div>
     )
-}
+})
