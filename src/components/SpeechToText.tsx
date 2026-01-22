@@ -119,7 +119,6 @@
 //     </div>
 //   );
 // }
-
 import { useEffect, useRef, useState } from "react";
 import SpeechRecognition, {
   useSpeechRecognition
@@ -148,10 +147,12 @@ export default function SpeechToText({
 
   const startedRef = useRef(false);
   const listenStartTimeRef = useRef<number | null>(null);
+  const retryingRef = useRef(false);
+
   const [error, setError] = useState<string | null>(null);
 
   /* ---------------------------------------------------
-     CHECK MICROPHONE PERMISSION
+     MIC PERMISSION
   --------------------------------------------------- */
   const checkMicPermission = async () => {
     try {
@@ -159,17 +160,43 @@ export default function SpeechToText({
       stream.getTracks().forEach(t => t.stop());
       return true;
     } catch (err: any) {
-      if (err.name === "NotAllowedError") {
-        setError("Microphone permission denied. Please allow access and try again.");
-      } else {
-        setError("Unable to access microphone.");
-      }
+      setError(
+        err.name === "NotAllowedError"
+          ? "Microphone permission denied. Please allow access and try again."
+          : "Unable to access microphone."
+      );
       return false;
     }
   };
 
   /* ---------------------------------------------------
-     START LISTENING (ONLY ONCE)
+     START LISTENING
+  --------------------------------------------------- */
+  const startListening = async () => {
+    const hasPermission = await checkMicPermission();
+    if (!hasPermission) return;
+
+    // 🔥 HARD RESET (critical for Android)
+    SpeechRecognition.stopListening();
+    await new Promise(r => setTimeout(r, 800));
+
+    try {
+      SpeechRecognition.startListening({
+        continuous: false,
+        interimResults: false,
+        language: "en-US"
+      });
+
+      listenStartTimeRef.current = Date.now();
+      startedRef.current = true;
+      retryingRef.current = false;
+    } catch {
+      setError("Failed to start microphone");
+    }
+  };
+
+  /* ---------------------------------------------------
+     AUTO START WHEN OPEN
   --------------------------------------------------- */
   useEffect(() => {
     if (!isOpen) return;
@@ -179,34 +206,13 @@ export default function SpeechToText({
       return;
     }
 
-    if (startedRef.current) return;
-    startedRef.current = true;
-
     resetTranscript();
     setError(null);
+    startedRef.current = false;
     listenStartTimeRef.current = null;
 
-    const start = async () => {
-      const hasPermission = await checkMicPermission();
-      if (!hasPermission) return;
-
-      // Android needs a warm-up delay
-      await new Promise(r => setTimeout(r, isAndroid ? 700 : 300));
-
-      try {
-        SpeechRecognition.startListening({
-          continuous: false,        // ✅ REQUIRED for Android
-          interimResults: false,    // ✅ REQUIRED
-          language: "en-US"
-        });
-
-        listenStartTimeRef.current = Date.now();
-      } catch {
-        setError("Failed to start microphone");
-      }
-    };
-
-    start();
+    const delay = isAndroid ? 700 : 300;
+    setTimeout(startListening, delay);
 
     return () => {
       SpeechRecognition.stopListening();
@@ -216,12 +222,12 @@ export default function SpeechToText({
   }, [isOpen, browserSupportsSpeechRecognition, resetTranscript]);
 
   /* ---------------------------------------------------
-     ANDROID AUTO STOP → RESULT / ERROR
+     HANDLE RESULT / NO SPEECH
   --------------------------------------------------- */
   useEffect(() => {
     if (!isOpen) return;
 
-    // ✅ Success case
+    // ✅ success
     if (!listening && transcript.trim()) {
       onTranscript(transcript.trim());
       resetTranscript();
@@ -229,40 +235,34 @@ export default function SpeechToText({
       return;
     }
 
-    // ❌ No speech (time-gated to avoid first-open bug)
+    // ❌ no speech (time-gated)
     if (
       !listening &&
       startedRef.current &&
       listenStartTimeRef.current &&
-      Date.now() - listenStartTimeRef.current > 1200 &&
-      !transcript.trim()
+      Date.now() - listenStartTimeRef.current > 1500 &&
+      !transcript.trim() &&
+      !retryingRef.current
     ) {
       setError("No speech detected. Please try again.");
     }
   }, [listening, transcript, isOpen, onTranscript, resetTranscript, onClose]);
 
   /* ---------------------------------------------------
-     RETRY
+     RETRY (ANDROID SAFE)
   --------------------------------------------------- */
   const handleRetry = async () => {
+    retryingRef.current = true;
     setError(null);
     resetTranscript();
     startedRef.current = false;
     listenStartTimeRef.current = null;
 
-    const hasPermission = await checkMicPermission();
-    if (!hasPermission) return;
+    // 🔥 CRITICAL: full stop + wait
+    SpeechRecognition.stopListening();
+    await new Promise(r => setTimeout(r, 1000));
 
-    await new Promise(r => setTimeout(r, 500));
-
-    SpeechRecognition.startListening({
-      continuous: false,
-      interimResults: false,
-      language: "en-US"
-    });
-
-    startedRef.current = true;
-    listenStartTimeRef.current = Date.now();
+    await startListening();
   };
 
   if (!isOpen) return null;
@@ -296,7 +296,7 @@ export default function SpeechToText({
   }
 
   /* ---------------------------------------------------
-     MAIN UI (UNCHANGED)
+     MAIN UI
   --------------------------------------------------- */
   return (
     <div className="fixed inset-0 bg-[#00000080] z-50 flex items-center justify-center px-2">
