@@ -3,389 +3,158 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 import { IMAGES } from '../constants/images'
 
 interface SpeechToTextProps {
-    isOpen: boolean
-    onClose: () => void
-    onTranscript: (text: string) => void
+  isOpen: boolean
+  onClose: () => void
+  onTranscript: (text: string) => void
 }
 
-export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechToTextProps) {
-    const {
-        transcript,
-        listening,
-        resetTranscript,
-        browserSupportsSpeechRecognition
-    } = useSpeechRecognition()
+export default function SpeechToText({
+  isOpen,
+  onClose,
+  onTranscript
+}: SpeechToTextProps) {
+  const {
+    transcript,
+    listening,
+    resetTranscript,
+    browserSupportsSpeechRecognition
+  } = useSpeechRecognition()
 
-    const [isListening, setIsListening] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const silenceTimerRef = useRef<number | null>(null)
-    const inactivityTimerRef = useRef<number | null>(null)
-    const hasStartedListeningRef = useRef(false)
-    const transcriptRef = useRef<string>('')
-    const listeningRef = useRef<boolean>(false)
-    const restartTimerRef = useRef<number | null>(null)
-    
-    // Detect Android device
-    const isAndroid = /Android/i.test(navigator.userAgent)
+  const [error, setError] = useState<string | null>(null)
+  const submitTimerRef = useRef<number | null>(null)
 
-    // Check microphone permission with better audio constraints for Android
-    const checkMicrophonePermission = useCallback(async () => {
-        try {
-            // Use better audio constraints for Android devices
-            const audioConstraints: MediaTrackConstraints = isAndroid ? {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 16000, // Better for speech recognition
-                channelCount: 1
-            } : {
-                echoCancellation: true,
-                noiseSuppression: true
-            }
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: audioConstraints 
-            })
-            stream.getTracks().forEach(track => track.stop())
-            return true
-        } catch (err: any) {
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                setError('Microphone permission denied. Please allow microphone access and try again.')
-                return false
-            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                setError('No microphone found. Please connect a microphone and try again.')
-                return false
-            } else {
-                setError('Failed to access microphone. Please check your settings.')
-                return false
-            }
-        }
-    }, [isAndroid])
+  const isAndroid = /Android/i.test(navigator.userAgent)
 
-    useEffect(() => {
-        if (isOpen) {
-            if (browserSupportsSpeechRecognition) {
-                resetTranscript()
-                setError(null)
-                hasStartedListeningRef.current = false
+  /* ----------------------------------
+   * Permission check (once per open)
+   * ---------------------------------- */
+  useEffect(() => {
+    if (!isOpen) return
 
-                // Check microphone permission first
-                checkMicrophonePermission().then((hasPermission) => {
-                    if (hasPermission) {
-                        try {
-                            // Android devices work better with non-continuous mode and restarting
-                            const recognitionOptions = isAndroid ? {
-                                continuous: false, // Android works better with non-continuous
-                                language: 'en-US',
-                                interimResults: true
-                            } : {
-                                continuous: true,
-                                language: 'en-US',
-                                interimResults: true
-                            }
-                            
-                            SpeechRecognition.startListening(recognitionOptions)
-                            hasStartedListeningRef.current = true
+    setError(null)
+    resetTranscript()
 
-                            // Set inactivity timer - show error if no speech after 6 seconds
-                            inactivityTimerRef.current = setTimeout(() => {
-                                // Check if we still have no transcript after timeout
-                                if (transcriptRef.current.trim().length === 0) {
-                                    setError('No speech detected. Please try speaking again.')
-                                    SpeechRecognition.stopListening()
-                                }
-                            }, 5000)
-                        } catch (err) {
-                            setError('Failed to start microphone. Please check your permissions.')
-                            console.error('Speech recognition error:', err)
-                        }
-                    }
-                })
-            } else {
-                setError('Your browser does not support speech recognition. Please use Chrome, Edge, or Safari.')
-            }
-        } else {
-            SpeechRecognition.stopListening()
-            resetTranscript()
-            hasStartedListeningRef.current = false
-            if (silenceTimerRef.current) {
-                clearTimeout(silenceTimerRef.current)
-            }
-            if (inactivityTimerRef.current) {
-                clearTimeout(inactivityTimerRef.current)
-            }
-            if (restartTimerRef.current) {
-                clearTimeout(restartTimerRef.current)
-            }
-        }
+    if (!browserSupportsSpeechRecognition) {
+      setError('Speech recognition is not supported on this browser.')
+      return
+    }
 
-        return () => {
-            if (isOpen) {
-                SpeechRecognition.stopListening()
-            }
-            if (silenceTimerRef.current) {
-                clearTimeout(silenceTimerRef.current)
-            }
-            if (inactivityTimerRef.current) {
-                clearTimeout(inactivityTimerRef.current)
-            }
-            if (restartTimerRef.current) {
-                clearTimeout(restartTimerRef.current)
-            }
-        }
-    }, [isOpen, browserSupportsSpeechRecognition, resetTranscript, checkMicrophonePermission])
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then(stream => stream.getTracks().forEach(t => t.stop()))
+      .catch(() => {
+        setError('Microphone permission denied.')
+      })
+  }, [isOpen, browserSupportsSpeechRecognition, resetTranscript])
 
-    const handleDone = useCallback(() => {
-        SpeechRecognition.stopListening()
-        if (transcript.trim()) {
-            onTranscript(transcript.trim())
-        }
+  /* ----------------------------------
+   * Start listening (user gesture safe)
+   * ---------------------------------- */
+  useEffect(() => {
+    if (!isOpen || error) return
+
+    try {
+      SpeechRecognition.startListening({
+        continuous: false, // REQUIRED for Android & iOS
+        language: 'en-US',
+        interimResults: true
+      })
+    } catch (e) {
+      setError('Failed to start microphone.')
+    }
+
+    return () => {
+      SpeechRecognition.stopListening()
+    }
+  }, [isOpen, error])
+
+  /* ----------------------------------
+   * Auto-submit when speech ends
+   * ---------------------------------- */
+  useEffect(() => {
+    if (submitTimerRef.current) {
+      clearTimeout(submitTimerRef.current)
+      submitTimerRef.current = null
+    }
+
+    // Speech finished
+    if (!listening && transcript.trim().length > 0 && isOpen) {
+      submitTimerRef.current = window.setTimeout(() => {
+        onTranscript(transcript.trim())
         resetTranscript()
         onClose()
-    }, [transcript, onTranscript, resetTranscript, onClose])
-
-    useEffect(() => {
-        transcriptRef.current = transcript
-    }, [transcript])
-
-    useEffect(() => {
-        listeningRef.current = listening
-        setIsListening(listening)
-
-        // Clear inactivity timer if user starts speaking
-        if (listening && transcript && transcript.trim().length > 0) {
-            if (inactivityTimerRef.current) {
-                clearTimeout(inactivityTimerRef.current)
-                inactivityTimerRef.current = null
-            }
-        }
-
-        // For Android: Only restart if listening stopped AND we have no transcript yet
-        // This prevents constant restarting when user has already spoken
-        if (isAndroid && !listening && hasStartedListeningRef.current && isOpen) {
-            const currentTranscript = transcriptRef.current.trim()
-            
-            // Only restart if we truly have no transcript (user hasn't spoken at all)
-            // If we have transcript, don't restart - let the silence detection handle searching
-            if (currentTranscript.length === 0) {
-                // Clear any existing restart timer
-                if (restartTimerRef.current) {
-                    clearTimeout(restartTimerRef.current)
-                }
-                
-                // Restart listening after a delay for Android - only if no speech detected
-                restartTimerRef.current = window.setTimeout(() => {
-                    // Double-check conditions before restarting:
-                    // 1. Still no transcript
-                    // 2. Modal is still open
-                    // 3. Not in the process of searching
-                    if (transcriptRef.current.trim().length === 0 && isOpen && !silenceTimerRef.current) {
-                        try {
-                            SpeechRecognition.startListening({
-                                continuous: false,
-                                language: 'en-US',
-                                interimResults: true
-                            })
-                        } catch (err) {
-                            console.error('Failed to restart listening on Android:', err)
-                        }
-                    }
-                }, 500) // Longer delay to avoid rapid restart cycles
-            } else {
-                // We have transcript - cancel any restart, let silence detection handle search
-                if (restartTimerRef.current) {
-                    clearTimeout(restartTimerRef.current)
-                    restartTimerRef.current = null
-                }
-            }
-        }
-    }, [listening, transcript, isAndroid, isOpen])
-
-    // Auto-search after 2 seconds of silence (when transcript stops changing)
-    useEffect(() => {
-        // Clear any existing silence timer when transcript changes
-        if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current)
-            silenceTimerRef.current = null
-        }
-
-        // Only set timer if we have transcript
-        if (transcript && transcript.trim().length > 0) {
-            // Cancel any restart timer since we have transcript
-            if (restartTimerRef.current) {
-                clearTimeout(restartTimerRef.current)
-                restartTimerRef.current = null
-            }
-
-            // For Android with non-continuous mode: when listening stops, we have final transcript
-            // For desktop with continuous mode: detect silence by transcript not changing
-            if (isAndroid) {
-                // On Android, when listening stops after user speaks, we have the final result
-                // Wait 2 seconds to see if user continues speaking, then search
-                if (!listening) {
-                    // Listening stopped and we have transcript - user finished speaking
-                    silenceTimerRef.current = window.setTimeout(() => {
-                        // Double-check: still not listening and we still have transcript
-                        // This prevents search if it restarted
-                        if (!listeningRef.current && transcriptRef.current.trim().length > 0) {
-                            handleDone()
-                        }
-                    }, 2000) // 2 seconds of silence before searching
-                } else {
-                    // Still listening - wait for silence (transcript stops changing)
-                    silenceTimerRef.current = window.setTimeout(() => {
-                        // If still listening and transcript hasn't changed, stop and search
-                        if (listeningRef.current && transcriptRef.current.trim().length > 0) {
-                            SpeechRecognition.stopListening()
-                            // Wait a moment for it to stop, then search
-                            setTimeout(() => {
-                                if (transcriptRef.current.trim().length > 0) {
-                                    handleDone()
-                                }
-                            }, 300)
-                        }
-                    }, 2000)
-                }
-            } else {
-                // Desktop: continuous mode - detect silence by transcript not changing
-                if (listening) {
-                    silenceTimerRef.current = window.setTimeout(() => {
-                        if (transcriptRef.current.trim().length > 0 && listeningRef.current) {
-                            handleDone()
-                        }
-                    }, 2000)
-                } else if (!listening) {
-                    // Listening stopped, search after short delay
-                    silenceTimerRef.current = window.setTimeout(() => {
-                        handleDone()
-                    }, 500)
-                }
-            }
-        }
-
-        // Cleanup
-        return () => {
-            if (silenceTimerRef.current) {
-                clearTimeout(silenceTimerRef.current)
-            }
-        }
-    }, [transcript, listening, handleDone, isAndroid])
-
-    // const handleCancel = () => {
-    //     SpeechRecognition.stopListening()
-    //     resetTranscript()
-    //     if (silenceTimerRef.current) {
-    //         clearTimeout(silenceTimerRef.current)
-    //     }
-    //     if (inactivityTimerRef.current) {
-    //         clearTimeout(inactivityTimerRef.current)
-    //     }
-    //     if (restartTimerRef.current) {
-    //         clearTimeout(restartTimerRef.current)
-    //     }
-    //     onClose()
-    // }
-
-    const handleRetry = async () => {
-        setError(null)
-        resetTranscript()
-        hasStartedListeningRef.current = false
-
-        const hasPermission = await checkMicrophonePermission()
-        if (hasPermission) {
-            try {
-                // Use Android-optimized settings for retry too
-                const recognitionOptions = isAndroid ? {
-                    continuous: false,
-                    language: 'en-US',
-                    interimResults: true
-                } : {
-                    continuous: true,
-                    language: 'en-US',
-                    interimResults: true
-                }
-                
-                SpeechRecognition.startListening(recognitionOptions)
-                hasStartedListeningRef.current = true
-
-                // Reset inactivity timer
-                if (inactivityTimerRef.current) {
-                    clearTimeout(inactivityTimerRef.current)
-                }
-                transcriptRef.current = '' // Reset transcript ref
-                inactivityTimerRef.current = window.setTimeout(() => {
-                    if (transcriptRef.current.trim().length === 0) {
-                        setError('No speech detected. Please try speaking again.')
-                        SpeechRecognition.stopListening()
-                    }
-                }, 6000)
-            } catch (err) {
-                setError('Failed to start microphone. Please check your permissions.')
-                console.error('Speech recognition error:', err)
-            }
-        }
+      }, 500)
     }
 
-    if (!isOpen) return null
-
-    // Show error state
-    if (error || !browserSupportsSpeechRecognition) {
-        const isPermissionError = error?.includes('permission') || error?.includes('Permission')
-        const isNoSpeechError = error?.includes('No speech detected')
-
-        return (
-            <div className='w-full h-screen flex flex-col items-center justify-center bg-[#00000080] fixed inset-0 px-2 z-50'>
-                <div className='bg-white dark:bg-[#2B2B2B] w-full lg:w-1/2 md:w-2/3 h-auto p-6 rounded-lg flex flex-col items-center justify-center gap-5'>
-                    <p className='text-black dark:text-white text-2xl font-normal'>Google</p>
-                    <div className='rounded-full bg-red-500 p-5'>
-                        <img src={IMAGES.mic} alt='mic' className='w-8 h-8 object-contain' />
-                    </div>
-                    <p className='text-black dark:text-white text-center text-sm px-4'>{error || 'Speech recognition not supported'}</p>
-                    {(isPermissionError || isNoSpeechError) && (
-                        <button
-                            onClick={handleRetry}
-                            className='px-6 py-2 bg-white text-[#2F6FDD] rounded-lg border border-[#DEDEDE] text-sm'
-                        >
-                            Try Again
-                        </button>
-                    )}
-                </div>
-            </div>
-        )
+    return () => {
+      if (submitTimerRef.current) {
+        clearTimeout(submitTimerRef.current)
+      }
     }
+  }, [listening, transcript, isOpen, onTranscript, resetTranscript, onClose])
 
+  /* ----------------------------------
+   * Retry
+   * ---------------------------------- */
+  const handleRetry = useCallback(() => {
+    setError(null)
+    resetTranscript()
+
+    SpeechRecognition.startListening({
+      continuous: false,
+      language: 'en-US',
+      interimResults: true
+    })
+  }, [resetTranscript])
+
+  if (!isOpen) return null
+
+  /* ----------------------------------
+   * Error UI
+   * ---------------------------------- */
+  if (error) {
     return (
-        <div className='w-full h-screen flex flex-col items-center justify-center bg-[#00000080] fixed inset-0 px-2 z-50'>
-            <div className='bg-white dark:bg-[#2B2B2B] w-full lg:w-1/2 md:w-2/3 h-auto p-6 rounded-lg flex flex-col items-center justify-center gap-5'>
-                <p className='text-black dark:text-white text-2xl font-normal'>Google</p>
-
-                {/* Animated microphone */}
-                <div className={`rounded-full ${isListening ? 'bg-[#2F6FDD] animate-pulse' : 'bg-[#9aa0a6]'} p-5 transition-all duration-300 ${isListening ? 'scale-110' : 'scale-100'}`}>
-                    <img
-                        src={IMAGES.mic}
-                        alt='mic'
-                        className={`w-8 h-8 object-contain transition-transform duration-300 ${isListening ? 'scale-110' : 'scale-100'}`}
-                    />
-                </div>
-
-                {/* Status text */}
-                <div className='flex flex-col items-center gap-2 min-h-[60px]'>
-                    {isListening ? (
-                        <p className='text-[#5f6368] dark:text-[#9aa0a6] text-sm'>Listening...</p>
-                    ) : transcript ? (
-                        <p className='text-[#5f6368] dark:text-[#9aa0a6] text-sm'>Done</p>
-                    ) : (
-                        <p className='text-[#5f6368] dark:text-[#9aa0a6] text-sm'>Speak now</p>
-                    )}
-
-                    {/* Transcript display */}
-                    {transcript && (
-                        <p className='text-black dark:text-white text-lg text-center px-4 max-w-full wrap-break-word'>
-                            {transcript}
-                        </p>
-                    )}
-                </div>
-            </div>
+      <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-[#2B2B2B] p-6 rounded-lg flex flex-col items-center gap-4">
+          <div className="bg-red-500 p-5 rounded-full">
+            <img src={IMAGES.mic} className="w-8 h-8" />
+          </div>
+          <p className="text-center text-sm">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="px-6 py-2 border rounded text-[#2F6FDD]"
+          >
+            Try again
+          </button>
         </div>
+      </div>
     )
+  }
+
+  /* ----------------------------------
+   * Main UI
+   * ---------------------------------- */
+  return (
+    <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-[#2B2B2B] p-6 rounded-lg flex flex-col items-center gap-5 w-full max-w-md">
+        <p className="text-xl">Google</p>
+
+        <div
+          className={`rounded-full p-5 transition ${
+            listening ? 'bg-[#2F6FDD] animate-pulse scale-110' : 'bg-[#9aa0a6]'
+          }`}
+        >
+          <img src={IMAGES.mic} className="w-8 h-8" />
+        </div>
+
+        <p className="text-sm text-[#5f6368]">
+          {listening ? 'Listening…' : transcript ? 'Done' : 'Speak now'}
+        </p>
+
+        {transcript && (
+          <p className="text-center text-lg px-4">{transcript}</p>
+        )}
+      </div>
+    </div>
+  )
 }
