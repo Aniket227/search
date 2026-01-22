@@ -160,48 +160,107 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
             }
         }
 
-        // For Android: Restart listening when it stops (since we use non-continuous mode)
+        // For Android: Only restart if listening stopped AND we have no transcript yet
+        // This prevents constant restarting when user has already spoken
         if (isAndroid && !listening && hasStartedListeningRef.current && isOpen) {
-            // If we have transcript, don't restart (user finished speaking)
-            if (!transcript || transcript.trim().length === 0) {
-                // Restart listening after a short delay for Android
+            const currentTranscript = transcriptRef.current.trim()
+            
+            // Only restart if we truly have no transcript (user hasn't spoken at all)
+            // If we have transcript, don't restart - let the silence detection handle searching
+            if (currentTranscript.length === 0) {
+                // Clear any existing restart timer
                 if (restartTimerRef.current) {
                     clearTimeout(restartTimerRef.current)
                 }
+                
+                // Restart listening after a delay for Android - only if no speech detected
                 restartTimerRef.current = window.setTimeout(() => {
-                    try {
-                        SpeechRecognition.startListening({
-                            continuous: false,
-                            language: 'en-US',
-                            interimResults: true
-                        })
-                    } catch (err) {
-                        console.error('Failed to restart listening on Android:', err)
+                    // Double-check conditions before restarting:
+                    // 1. Still no transcript
+                    // 2. Modal is still open
+                    // 3. Not in the process of searching
+                    if (transcriptRef.current.trim().length === 0 && isOpen && !silenceTimerRef.current) {
+                        try {
+                            SpeechRecognition.startListening({
+                                continuous: false,
+                                language: 'en-US',
+                                interimResults: true
+                            })
+                        } catch (err) {
+                            console.error('Failed to restart listening on Android:', err)
+                        }
                     }
-                }, 100)
+                }, 500) // Longer delay to avoid rapid restart cycles
+            } else {
+                // We have transcript - cancel any restart, let silence detection handle search
+                if (restartTimerRef.current) {
+                    clearTimeout(restartTimerRef.current)
+                    restartTimerRef.current = null
+                }
             }
         }
     }, [listening, transcript, isAndroid, isOpen])
 
     // Auto-search after 2 seconds of silence (when transcript stops changing)
     useEffect(() => {
-        if (listening && transcript && transcript.trim().length > 0) {
-            if (silenceTimerRef.current) {
-                clearTimeout(silenceTimerRef.current)
+        // Clear any existing silence timer when transcript changes
+        if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current)
+            silenceTimerRef.current = null
+        }
+
+        // Only set timer if we have transcript
+        if (transcript && transcript.trim().length > 0) {
+            // Cancel any restart timer since we have transcript
+            if (restartTimerRef.current) {
+                clearTimeout(restartTimerRef.current)
+                restartTimerRef.current = null
             }
 
-            silenceTimerRef.current = window.setTimeout(() => {
-                if (transcriptRef.current.trim().length > 0 && listeningRef.current) {
-                    handleDone()
+            // For Android with non-continuous mode: when listening stops, we have final transcript
+            // For desktop with continuous mode: detect silence by transcript not changing
+            if (isAndroid) {
+                // On Android, when listening stops after user speaks, we have the final result
+                // Wait 2 seconds to see if user continues speaking, then search
+                if (!listening) {
+                    // Listening stopped and we have transcript - user finished speaking
+                    silenceTimerRef.current = window.setTimeout(() => {
+                        // Double-check: still not listening and we still have transcript
+                        // This prevents search if it restarted
+                        if (!listeningRef.current && transcriptRef.current.trim().length > 0) {
+                            handleDone()
+                        }
+                    }, 2000) // 2 seconds of silence before searching
+                } else {
+                    // Still listening - wait for silence (transcript stops changing)
+                    silenceTimerRef.current = window.setTimeout(() => {
+                        // If still listening and transcript hasn't changed, stop and search
+                        if (listeningRef.current && transcriptRef.current.trim().length > 0) {
+                            SpeechRecognition.stopListening()
+                            // Wait a moment for it to stop, then search
+                            setTimeout(() => {
+                                if (transcriptRef.current.trim().length > 0) {
+                                    handleDone()
+                                }
+                            }, 300)
+                        }
+                    }, 2000)
                 }
-            }, 2000)
-        } else if (!listening && transcript && transcript.trim().length > 0) {
-            if (silenceTimerRef.current) {
-                clearTimeout(silenceTimerRef.current)
+            } else {
+                // Desktop: continuous mode - detect silence by transcript not changing
+                if (listening) {
+                    silenceTimerRef.current = window.setTimeout(() => {
+                        if (transcriptRef.current.trim().length > 0 && listeningRef.current) {
+                            handleDone()
+                        }
+                    }, 2000)
+                } else if (!listening) {
+                    // Listening stopped, search after short delay
+                    silenceTimerRef.current = window.setTimeout(() => {
+                        handleDone()
+                    }, 500)
+                }
             }
-            silenceTimerRef.current = window.setTimeout(() => {
-                handleDone()
-            }, 500) 
         }
 
         // Cleanup
@@ -210,7 +269,7 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
                 clearTimeout(silenceTimerRef.current)
             }
         }
-    }, [transcript, listening, handleDone])
+    }, [transcript, listening, handleDone, isAndroid])
 
     // const handleCancel = () => {
     //     SpeechRecognition.stopListening()
