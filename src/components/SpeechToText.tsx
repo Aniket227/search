@@ -23,11 +23,29 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
     const hasStartedListeningRef = useRef(false)
     const transcriptRef = useRef<string>('')
     const listeningRef = useRef<boolean>(false)
+    const restartTimerRef = useRef<number | null>(null)
+    
+    // Detect Android device
+    const isAndroid = /Android/i.test(navigator.userAgent)
 
-    // Check microphone permission
+    // Check microphone permission with better audio constraints for Android
     const checkMicrophonePermission = useCallback(async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            // Use better audio constraints for Android devices
+            const audioConstraints: MediaTrackConstraints = isAndroid ? {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 16000, // Better for speech recognition
+                channelCount: 1
+            } : {
+                echoCancellation: true,
+                noiseSuppression: true
+            }
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: audioConstraints 
+            })
             stream.getTracks().forEach(track => track.stop())
             return true
         } catch (err: any) {
@@ -42,7 +60,7 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
                 return false
             }
         }
-    }, [])
+    }, [isAndroid])
 
     useEffect(() => {
         if (isOpen) {
@@ -55,11 +73,18 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
                 checkMicrophonePermission().then((hasPermission) => {
                     if (hasPermission) {
                         try {
-                            SpeechRecognition.startListening({
+                            // Android devices work better with non-continuous mode and restarting
+                            const recognitionOptions = isAndroid ? {
+                                continuous: false, // Android works better with non-continuous
+                                language: 'en-US',
+                                interimResults: true
+                            } : {
                                 continuous: true,
                                 language: 'en-US',
                                 interimResults: true
-                            })
+                            }
+                            
+                            SpeechRecognition.startListening(recognitionOptions)
                             hasStartedListeningRef.current = true
 
                             // Set inactivity timer - show error if no speech after 6 seconds
@@ -89,6 +114,9 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
             if (inactivityTimerRef.current) {
                 clearTimeout(inactivityTimerRef.current)
             }
+            if (restartTimerRef.current) {
+                clearTimeout(restartTimerRef.current)
+            }
         }
 
         return () => {
@@ -100,6 +128,9 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
             }
             if (inactivityTimerRef.current) {
                 clearTimeout(inactivityTimerRef.current)
+            }
+            if (restartTimerRef.current) {
+                clearTimeout(restartTimerRef.current)
             }
         }
     }, [isOpen, browserSupportsSpeechRecognition, resetTranscript, checkMicrophonePermission])
@@ -128,7 +159,29 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
                 inactivityTimerRef.current = null
             }
         }
-    }, [listening, transcript])
+
+        // For Android: Restart listening when it stops (since we use non-continuous mode)
+        if (isAndroid && !listening && hasStartedListeningRef.current && isOpen) {
+            // If we have transcript, don't restart (user finished speaking)
+            if (!transcript || transcript.trim().length === 0) {
+                // Restart listening after a short delay for Android
+                if (restartTimerRef.current) {
+                    clearTimeout(restartTimerRef.current)
+                }
+                restartTimerRef.current = window.setTimeout(() => {
+                    try {
+                        SpeechRecognition.startListening({
+                            continuous: false,
+                            language: 'en-US',
+                            interimResults: true
+                        })
+                    } catch (err) {
+                        console.error('Failed to restart listening on Android:', err)
+                    }
+                }, 100)
+            }
+        }
+    }, [listening, transcript, isAndroid, isOpen])
 
     // Auto-search after 2 seconds of silence (when transcript stops changing)
     useEffect(() => {
@@ -159,17 +212,20 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
         }
     }, [transcript, listening, handleDone])
 
-    // const handleCancel = () => {
-    //     SpeechRecognition.stopListening()
-    //     resetTranscript()
-    //     if (silenceTimerRef.current) {
-    //         clearTimeout(silenceTimerRef.current)
-    //     }
-    //     if (inactivityTimerRef.current) {
-    //         clearTimeout(inactivityTimerRef.current)
-    //     }
-    //     onClose()
-    // }
+    const handleCancel = () => {
+        SpeechRecognition.stopListening()
+        resetTranscript()
+        if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current)
+        }
+        if (inactivityTimerRef.current) {
+            clearTimeout(inactivityTimerRef.current)
+        }
+        if (restartTimerRef.current) {
+            clearTimeout(restartTimerRef.current)
+        }
+        onClose()
+    }
 
     const handleRetry = async () => {
         setError(null)
@@ -179,11 +235,18 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
         const hasPermission = await checkMicrophonePermission()
         if (hasPermission) {
             try {
-                SpeechRecognition.startListening({
+                // Use Android-optimized settings for retry too
+                const recognitionOptions = isAndroid ? {
                     continuous: false,
                     language: 'en-US',
                     interimResults: true
-                })
+                } : {
+                    continuous: true,
+                    language: 'en-US',
+                    interimResults: true
+                }
+                
+                SpeechRecognition.startListening(recognitionOptions)
                 hasStartedListeningRef.current = true
 
                 // Reset inactivity timer
