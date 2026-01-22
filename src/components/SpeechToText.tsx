@@ -23,7 +23,6 @@ export default function SpeechToText({
   const [error, setError] = useState<string | null>(null)
   const submitTimerRef = useRef<number | null>(null)
 
-  const isAndroid = /Android/i.test(navigator.userAgent)
 
   /* ----------------------------------
    * Permission check (once per open)
