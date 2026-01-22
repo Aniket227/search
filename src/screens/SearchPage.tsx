@@ -6,6 +6,7 @@ import { getNews, googleSearch } from '../api'
 import type { NewsArticle } from '../api'
 import { searchCache } from '../utils/cache'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import SpeechToText from '../components/SpeechToText'
 
 export default function SearchPage() {
     const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
@@ -15,10 +16,29 @@ export default function SearchPage() {
     const [inputText, setInputText] = useState('')
     const [searchResults, setSearchResults] = useState<any[]>([])
     const [hotwords, setHotwords] = useState<any[]>([])
+    const [isSpeechToTextOpen, setIsSpeechToTextOpen] = useState(false)
     const observerTarget = useRef<HTMLDivElement>(null)
     const observerRef = useRef<IntersectionObserver | null>(null)
     const debounceDelay = 100
     const inputRef = useRef<HTMLInputElement>(null)
+
+
+    const handleMicClick = useCallback(() => {
+        setIsSpeechToTextOpen(true)
+    }, [])
+
+    const handleSpeechClose = useCallback(() => {
+        setIsSpeechToTextOpen(false)
+    }, [])
+
+    const handleSpeechTranscript = useCallback((text: string) => {
+        const searchQuery = text.trim()
+        if (searchQuery) {
+            openUrl(searchQuery)
+        }
+        setIsSpeechToTextOpen(false)
+    }, [])
+
 
 
     const fetchNews = useCallback(async (page: number, append: boolean = false) => {
@@ -186,7 +206,7 @@ export default function SearchPage() {
     }, [hasMore, isLoading, currentPageNo, fetchNews, newsArticles.length])
 
     const openUrl = useCallback((url: string) => {
-        if (window?.AndroidBridge) {
+        // if (window?.AndroidBridge) {
             if (url.includes('http')) {
                 window?.AndroidBridge?.openUrl(url)
                 return
@@ -194,15 +214,17 @@ export default function SearchPage() {
                 let baseUrl = "https://search.yahoo.com/search?q="
                 let encodedUrl = encodeURIComponent(url)
                 let finalUrl = baseUrl + encodedUrl
-                window?.AndroidBridge?.openUrl(finalUrl)
+                window.open(finalUrl, '_blank')
+                // window?.AndroidBridge?.openUrl(finalUrl)
                 return
             }
-        }
+        // }
     }, [])
 
     return (
         <div className='w-full h-screen flex flex-col p-2 gap-3 bg-[#f4f4f4] overflow-y-auto'>
-            <SearchInput inputRef={inputRef} onChangeText={setInputText} inputText={inputText} />
+            <SpeechToText isOpen={isSpeechToTextOpen} onClose={handleSpeechClose} onTranscript={handleSpeechTranscript} />
+            <SearchInput inputRef={inputRef} onChangeText={setInputText} inputText={inputText} onMicClick={handleMicClick}/>
             <SearchItemContainer openUrl={openUrl} hotwords={hotwords} inputText={inputText} searchResults={searchResults} />
             {inputText?.length == 0 && <div className='w-full flex flex-col gap-3'>
                 {newsArticles?.map((article, index) => (

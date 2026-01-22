@@ -5,13 +5,15 @@ interface SearchInputProps {
   inputText: string
   onChangeText: (value: string) => void
   inputRef: React.RefObject<HTMLInputElement | null>
+  onMicClick: () => void
 }
 
-export const SearchInput = React.memo(({ onChangeText, inputText, inputRef }: SearchInputProps) => {
+export const SearchInput = React.memo(({ onChangeText, inputText, inputRef, onMicClick }: SearchInputProps) => {
 
   const handleMicClick = useCallback(() => {
-    window?.AndroidBridge?.onVoiceSearch()
-  }, [window?.AndroidBridge?.onVoiceSearch])
+    onMicClick()
+    // window?.AndroidBridge?.onVoiceSearch()
+  }, [onMicClick])
 
   return (
     <div className='w-full flex flex-row p-2.5 gap-2 items-center border border-[#ebebeb] rounded-3xl bg-white'>
