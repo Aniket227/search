@@ -1,159 +1,121 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
-import { IMAGES } from '../constants/images'
+import { useEffect, useRef, useState } from "react";
+import SpeechRecognition, {
+  useSpeechRecognition
+} from "react-speech-recognition";
+import { IMAGES } from "../constants/images";
 
-interface SpeechToTextProps {
-  isOpen: boolean
-  onClose: () => void
-  onTranscript: (text: string) => void
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onTranscript: (text: string) => void;
 }
+
+// const isAndroid = /Android/i.test(navigator.userAgent);
 
 export default function SpeechToText({
   isOpen,
   onClose,
   onTranscript
-}: SpeechToTextProps) {
+}: Props) {
   const {
     transcript,
     listening,
     resetTranscript,
     browserSupportsSpeechRecognition
-  } = useSpeechRecognition()
+  } = useSpeechRecognition();
 
-  const [error, setError] = useState<string | null>(null)
-  const submitTimerRef = useRef<number | null>(null)
+  const startedRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
-
-  /* ----------------------------------
-   * Permission check (once per open)
-   * ---------------------------------- */
+  /* ---------------------------------------------------
+     START LISTENING (ONLY ONCE)
+  --------------------------------------------------- */
   useEffect(() => {
-    if (!isOpen) return
-
-    setError(null)
-    resetTranscript()
+    if (!isOpen) return;
 
     if (!browserSupportsSpeechRecognition) {
-      setError('Speech recognition is not supported on this browser.')
-      return
+      setError("Speech recognition not supported on this browser");
+      return;
     }
 
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then(stream => stream.getTracks().forEach(t => t.stop()))
-      .catch(() => {
-        setError('Microphone permission denied.')
-      })
-  }, [isOpen, browserSupportsSpeechRecognition, resetTranscript])
+    if (startedRef.current) return;
+    startedRef.current = true;
 
-  /* ----------------------------------
-   * Start listening (user gesture safe)
-   * ---------------------------------- */
-  useEffect(() => {
-    if (!isOpen || error) return
+    resetTranscript();
+    setError(null);
 
-    try {
-      SpeechRecognition.startListening({
-        continuous: false, // REQUIRED for Android & iOS
-        language: 'en-US',
-        interimResults: true
-      })
-    } catch (e) {
-      setError('Failed to start microphone.')
-    }
+    // Android needs a delay
+    const start = async () => {
+      await new Promise(r => setTimeout(r, 700));
 
-    return () => {
-      SpeechRecognition.stopListening()
-    }
-  }, [isOpen, error])
-
-  /* ----------------------------------
-   * Auto-submit when speech ends
-   * ---------------------------------- */
-  useEffect(() => {
-    if (submitTimerRef.current) {
-      clearTimeout(submitTimerRef.current)
-      submitTimerRef.current = null
-    }
-
-    // Speech finished
-    if (!listening && transcript.trim().length > 0 && isOpen) {
-      submitTimerRef.current = window.setTimeout(() => {
-        onTranscript(transcript.trim())
-        resetTranscript()
-        onClose()
-      }, 500)
-    }
-
-    return () => {
-      if (submitTimerRef.current) {
-        clearTimeout(submitTimerRef.current)
+      try {
+        SpeechRecognition.startListening({
+          continuous: false,        // ✅ REQUIRED
+          interimResults: false,    // ✅ REQUIRED
+          language: "en-US"
+        });
+      } catch {
+        setError("Failed to start microphone");
       }
+    };
+
+    start();
+
+    return () => {
+      SpeechRecognition.stopListening();
+      startedRef.current = false;
+    };
+  }, [isOpen, browserSupportsSpeechRecognition, resetTranscript]);
+
+  /* ---------------------------------------------------
+     ANDROID: WAIT FOR AUTO STOP → FINAL RESULT
+  --------------------------------------------------- */
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Android stops automatically after speech
+    if (!listening && transcript.trim()) {
+      onTranscript(transcript.trim());
+      resetTranscript();
+      onClose();
     }
-  }, [listening, transcript, isOpen, onTranscript, resetTranscript, onClose])
+  }, [listening, transcript, isOpen, onTranscript, resetTranscript, onClose]);
 
-  /* ----------------------------------
-   * Retry
-   * ---------------------------------- */
-  const handleRetry = useCallback(() => {
-    setError(null)
-    resetTranscript()
+  if (!isOpen) return null;
 
-    SpeechRecognition.startListening({
-      continuous: false,
-      language: 'en-US',
-      interimResults: true
-    })
-  }, [resetTranscript])
-
-  if (!isOpen) return null
-
-  /* ----------------------------------
-   * Error UI
-   * ---------------------------------- */
-  if (error) {
-    return (
-      <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-[#2B2B2B] p-6 rounded-lg flex flex-col items-center gap-4">
-          <div className="bg-red-500 p-5 rounded-full">
-            <img src={IMAGES.mic} className="w-8 h-8" />
-          </div>
-          <p className="text-center text-sm">{error}</p>
-          <button
-            onClick={handleRetry}
-            className="px-6 py-2 border rounded text-[#2F6FDD]"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  /* ----------------------------------
-   * Main UI
-   * ---------------------------------- */
+  /* ---------------------------------------------------
+     UI
+  --------------------------------------------------- */
   return (
-    <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-[#2B2B2B] p-6 rounded-lg flex flex-col items-center gap-5 w-full max-w-md">
-        <p className="text-xl">Google</p>
+    <div className="fixed inset-0 bg-[#00000080] z-50 flex items-center justify-center px-2">
+      <div className="bg-white dark:bg-[#2B2B2B] w-full md:w-2/3 lg:w-1/2 p-6 rounded-lg flex flex-col items-center gap-5">
+        <p className="text-2xl text-black dark:text-white">Google</p>
 
         <div
-          className={`rounded-full p-5 transition ${
-            listening ? 'bg-[#2F6FDD] animate-pulse scale-110' : 'bg-[#9aa0a6]'
+          className={`rounded-full p-5 transition-all ${
+            listening ? "bg-[#2F6FDD] animate-pulse scale-110" : "bg-[#9aa0a6]"
           }`}
         >
-          <img src={IMAGES.mic} className="w-8 h-8" />
+          <img src={IMAGES.mic} alt="mic" className="w-8 h-8" />
         </div>
 
-        <p className="text-sm text-[#5f6368]">
-          {listening ? 'Listening…' : transcript ? 'Done' : 'Speak now'}
+        <p className="text-sm text-[#5f6368] dark:text-[#9aa0a6]">
+          {listening ? "Listening..." : "Speak now"}
         </p>
 
-        {transcript && (
-          <p className="text-center text-lg px-4">{transcript}</p>
+        {error && (
+          <p className="text-red-500 text-center text-sm px-4">{error}</p>
+        )}
+
+        {listening && (
+          <button
+            onClick={() => SpeechRecognition.stopListening()}
+            className="mt-4 px-6 py-2 bg-[#2F6FDD] text-white rounded-lg"
+          >
+            Stop
+          </button>
         )}
       </div>
     </div>
-  )
+  );
 }
