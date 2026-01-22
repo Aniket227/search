@@ -212,20 +212,20 @@ export default function SpeechToText({ isOpen, onClose, onTranscript }: SpeechTo
         }
     }, [transcript, listening, handleDone])
 
-    const handleCancel = () => {
-        SpeechRecognition.stopListening()
-        resetTranscript()
-        if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current)
-        }
-        if (inactivityTimerRef.current) {
-            clearTimeout(inactivityTimerRef.current)
-        }
-        if (restartTimerRef.current) {
-            clearTimeout(restartTimerRef.current)
-        }
-        onClose()
-    }
+    // const handleCancel = () => {
+    //     SpeechRecognition.stopListening()
+    //     resetTranscript()
+    //     if (silenceTimerRef.current) {
+    //         clearTimeout(silenceTimerRef.current)
+    //     }
+    //     if (inactivityTimerRef.current) {
+    //         clearTimeout(inactivityTimerRef.current)
+    //     }
+    //     if (restartTimerRef.current) {
+    //         clearTimeout(restartTimerRef.current)
+    //     }
+    //     onClose()
+    // }
 
     const handleRetry = async () => {
         setError(null)
