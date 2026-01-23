@@ -214,7 +214,8 @@ export default function SearchPage() {
                 let baseUrl = "https://search.yahoo.com/search?q="
                 let encodedUrl = encodeURIComponent(url)
                 let finalUrl = baseUrl + encodedUrl
-                window.open(finalUrl, '_blank')
+                window.location.href = finalUrl
+                // window.open(finalUrl, '_blank')
                 // window?.AndroidBridge?.openUrl(finalUrl)
                 return
             }
